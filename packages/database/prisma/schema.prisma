@@ -1,0 +1,597 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 집사 (Guardian) - 로그인/인증 주체
+// ============================================================
+model Guardian {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String?
+  name         String
+  phone        String?
+  profileImage String?
+  provider     AuthProvider @default(EMAIL)
+  providerId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  petAccounts PetAccount[]
+
+  @@map("guardians")
+}
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  KAKAO
+  NAVER
+}
+
+// ============================================================
+// 펫 계정 (PetAccount) - 서비스의 핵심 엔티티 (펫 = 계정)
+// ============================================================
+model PetAccount {
+  id           String      @id @default(uuid())
+  guardianId   String
+  name         String
+  species      PetSpecies
+  breed        String?
+  birthDate    DateTime?
+  gender       PetGender?
+  profileImage String?
+  bio          String?
+  personality  String[]
+  favorites    String[]
+  regionCode   String?
+  regionName   String?
+  latitude     Decimal?
+  longitude    Decimal?
+  status       PetStatus   @default(ACTIVE)
+  havenDate    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  guardian     Guardian    @relation(fields: [guardianId], references: [id])
+
+  // 소셜 활동
+  posts              Post[]
+  comments           Comment[]
+  likes              Like[]
+  stories            Story[]
+  activities         Activity[]
+
+  // 친구 관계
+  sentRequests       Friendship[]   @relation("FriendRequester")
+  receivedRequests   Friendship[]   @relation("FriendReceiver")
+
+  // 커뮤니티
+  communityMembers   CommunityMember[]
+  createdCommunities Community[]
+
+  // 산책
+  hostedWalks        WalkMeetup[]
+  walkParticipations WalkParticipant[]
+
+  // Pet Haven
+  memorial           HavenMemorial?
+  havenTributes      HavenTribute[]
+  sentCondolences    Condolence[]
+
+  // 코인
+  coinWallet         CoinWallet?
+  havenItemPurchases HavenItemPurchase[]
+
+  @@index([guardianId])
+  @@index([regionCode])
+  @@index([latitude, longitude])
+  @@index([status])
+  @@map("pet_accounts")
+}
+
+enum PetSpecies {
+  DOG
+  CAT
+  BIRD
+  RABBIT
+  HAMSTER
+  FISH
+  REPTILE
+  OTHER
+}
+
+enum PetGender {
+  MALE
+  FEMALE
+  NEUTERED_MALE
+  SPAYED_FEMALE
+}
+
+enum PetStatus {
+  ACTIVE
+  HAVEN
+}
+
+// ============================================================
+// 친구 관계 (Friendship) - 펫과 펫 사이의 친구
+// ============================================================
+model Friendship {
+  id          String           @id @default(uuid())
+  requesterId String
+  receiverId  String
+  status      FriendshipStatus @default(PENDING)
+  method      FriendMethod     @default(SEARCH)
+  createdAt   DateTime         @default(now())
+  acceptedAt  DateTime?
+
+  requester PetAccount @relation("FriendRequester", fields: [requesterId], references: [id])
+  receiver  PetAccount @relation("FriendReceiver", fields: [receiverId], references: [id])
+
+  @@unique([requesterId, receiverId])
+  @@index([requesterId, status])
+  @@index([receiverId, status])
+  @@map("friendships")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum FriendMethod {
+  QR_CODE
+  NEARBY
+  SEARCH
+  RECOMMENDATION
+}
+
+// ============================================================
+// 게시글 (Post) - Geo Tag 사진/동영상 포스팅
+// ============================================================
+model Post {
+  id           String     @id @default(uuid())
+  petAccountId String
+  content      String?
+  images       String[]
+  videos       String[]
+  visibility   Visibility @default(PUBLIC)
+  geoTag       String?
+  latitude     Decimal?
+  longitude    Decimal?
+  likeCount    Int        @default(0)
+  commentCount Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+  comments   Comment[]
+  likes      Like[]
+
+  @@index([petAccountId, createdAt(sort: Desc)])
+  @@index([geoTag])
+  @@index([latitude, longitude])
+  @@map("posts")
+}
+
+enum Visibility {
+  PUBLIC
+  FRIENDS
+  PRIVATE
+}
+
+// ============================================================
+// 댓글 (Comment)
+// ============================================================
+model Comment {
+  id           String   @id @default(uuid())
+  postId       String
+  petAccountId String
+  content      String
+  parentId     String?
+  createdAt    DateTime @default(now())
+
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+  parent    Comment?   @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[]  @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+  @@map("comments")
+}
+
+// ============================================================
+// 좋아요 (Like)
+// ============================================================
+model Like {
+  id           String   @id @default(uuid())
+  postId       String
+  petAccountId String
+  createdAt    DateTime @default(now())
+
+  post       Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+
+  @@unique([postId, petAccountId])
+  @@map("likes")
+}
+
+// ============================================================
+// 스토리 (Story) - Geo Tag 기반 24시간 콘텐츠
+// ============================================================
+model Story {
+  id           String    @id @default(uuid())
+  petAccountId String
+  mediaUrl     String
+  mediaType    MediaType
+  effectType   String?
+  geoTag       String?
+  latitude     Decimal?
+  longitude    Decimal?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+
+  @@index([petAccountId, expiresAt])
+  @@index([geoTag])
+  @@map("stories")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+// ============================================================
+// 활동 기록 (Activity) - 산책, 놀이, 건강 등
+// ============================================================
+model Activity {
+  id           String       @id @default(uuid())
+  petAccountId String
+  type         ActivityType
+  title        String
+  description  String?
+  duration     Int?
+  distance     Decimal?
+  routePath    Json?
+  latitude     Decimal?
+  longitude    Decimal?
+  createdAt    DateTime     @default(now())
+
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+
+  @@index([petAccountId, type, createdAt])
+  @@map("activities")
+}
+
+enum ActivityType {
+  WALK
+  PLAY
+  HEALTH
+  MEAL
+}
+
+// ============================================================
+// 커뮤니티 (Community) - 지역 기반 그룹
+// ============================================================
+model Community {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  regionCode  String?
+  regionName  String?
+  coverImage  String?
+  memberCount Int      @default(0)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy PetAccount        @relation(fields: [createdById], references: [id])
+  members   CommunityMember[]
+  posts     CommunityPost[]
+
+  @@index([regionCode])
+  @@map("communities")
+}
+
+model CommunityMember {
+  id           String        @id @default(uuid())
+  communityId  String
+  petAccountId String
+  role         CommunityRole @default(MEMBER)
+  joinedAt     DateTime      @default(now())
+
+  community  Community  @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+
+  @@unique([communityId, petAccountId])
+  @@map("community_members")
+}
+
+enum CommunityRole {
+  ADMIN
+  MEMBER
+}
+
+model CommunityPost {
+  id          String   @id @default(uuid())
+  communityId String
+  petAccountId String
+  content     String
+  images      String[]
+  createdAt   DateTime @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@index([communityId, createdAt(sort: Desc)])
+  @@map("community_posts")
+}
+
+// ============================================================
+// 산책 모임 (WalkMeetup)
+// ============================================================
+model WalkMeetup {
+  id                  String       @id @default(uuid())
+  title               String
+  description         String?
+  hostId              String
+  meetDate            DateTime
+  meetPoint           String
+  latitude            Decimal?
+  longitude           Decimal?
+  maxParticipants     Int          @default(10)
+  currentParticipants Int          @default(0)
+  status              WalkStatus   @default(UPCOMING)
+  createdAt           DateTime     @default(now())
+
+  host         PetAccount        @relation(fields: [hostId], references: [id])
+  participants WalkParticipant[]
+
+  @@index([meetDate])
+  @@index([latitude, longitude])
+  @@map("walk_meetups")
+}
+
+model WalkParticipant {
+  id           String              @id @default(uuid())
+  walkMeetupId String
+  petAccountId String
+  status       WalkParticipantStatus @default(PENDING)
+  joinedAt     DateTime            @default(now())
+
+  walkMeetup WalkMeetup @relation(fields: [walkMeetupId], references: [id], onDelete: Cascade)
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+
+  @@unique([walkMeetupId, petAccountId])
+  @@map("walk_participants")
+}
+
+enum WalkStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum WalkParticipantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================
+// 생활 서비스 - 동물병원 (Hospital)
+// ============================================================
+model Hospital {
+  id           String   @id @default(uuid())
+  name         String
+  address      String
+  phone        String?
+  regionCode   String?
+  latitude     Decimal?
+  longitude    Decimal?
+  specialties  String[]
+  openingHours Json?
+  rating       Decimal  @default(0)
+  reviewCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([regionCode])
+  @@index([latitude, longitude])
+  @@map("hospitals")
+}
+
+// ============================================================
+// 생활 서비스 - 펫 보험 (Insurance)
+// ============================================================
+model Insurance {
+  id             String       @id @default(uuid())
+  providerName   String
+  productName    String
+  description    String?
+  monthlyPrice   Decimal?
+  coverageAmount Decimal?
+  targetSpecies  PetSpecies[]
+  externalUrl    String?
+  createdAt      DateTime     @default(now())
+
+  @@map("insurances")
+}
+
+// ============================================================
+// Pet Haven - 추모 공간
+// ============================================================
+model HavenMemorial {
+  id             String   @id @default(uuid())
+  petAccountId   String   @unique
+  tributeMessage String?
+  coverImage     String?
+  createdAt      DateTime @default(now())
+
+  petAccount     PetAccount          @relation(fields: [petAccountId], references: [id])
+  memories       HavenMemory[]
+  tributes       HavenTribute[]
+  condolences    Condolence[]
+  purchasedItems HavenItemPurchase[]
+
+  @@map("haven_memorials")
+}
+
+model HavenMemory {
+  id         String    @id @default(uuid())
+  memorialId String
+  mediaUrl   String
+  mediaType  MediaType
+  caption    String?
+  memoryDate DateTime?
+  createdAt  DateTime  @default(now())
+
+  memorial HavenMemorial @relation(fields: [memorialId], references: [id], onDelete: Cascade)
+
+  @@index([memorialId, memoryDate])
+  @@map("haven_memories")
+}
+
+model HavenTribute {
+  id           String   @id @default(uuid())
+  memorialId   String
+  petAccountId String
+  message      String
+  createdAt    DateTime @default(now())
+
+  memorial   HavenMemorial @relation(fields: [memorialId], references: [id], onDelete: Cascade)
+  petAccount PetAccount    @relation(fields: [petAccountId], references: [id])
+
+  @@index([memorialId, createdAt(sort: Desc)])
+  @@map("haven_tributes")
+}
+
+// ============================================================
+// 코인 시스템 - 조의금 & 추모관 꾸미기
+// ============================================================
+model CoinWallet {
+  id            String   @id @default(uuid())
+  petAccountId  String   @unique
+  balance       Decimal  @default(0)
+  totalReceived Decimal  @default(0)
+  totalSpent    Decimal  @default(0)
+  updatedAt     DateTime @updatedAt
+
+  petAccount   PetAccount       @relation(fields: [petAccountId], references: [id])
+  transactions CoinTransaction[]
+
+  @@map("coin_wallets")
+}
+
+model CoinTransaction {
+  id          String              @id @default(uuid())
+  walletId    String
+  type        CoinTransactionType
+  amount      Decimal
+  direction   CoinDirection
+  referenceId String?
+  description String?
+  createdAt   DateTime            @default(now())
+
+  wallet CoinWallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt(sort: Desc)])
+  @@map("coin_transactions")
+}
+
+enum CoinTransactionType {
+  CONDOLENCE_RECEIVED
+  ITEM_PURCHASE
+  REFUND
+}
+
+enum CoinDirection {
+  IN
+  OUT
+}
+
+model Condolence {
+  id         String   @id @default(uuid())
+  senderId   String
+  memorialId String
+  amount     Decimal
+  message    String?
+  createdAt  DateTime @default(now())
+
+  sender   PetAccount    @relation(fields: [senderId], references: [id])
+  memorial HavenMemorial @relation(fields: [memorialId], references: [id])
+
+  @@index([memorialId, createdAt(sort: Desc)])
+  @@map("condolences")
+}
+
+model HavenShopItem {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  category    HavenItemCategory
+  imageUrl    String?
+  price       Decimal
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+
+  purchases HavenItemPurchase[]
+
+  @@map("haven_shop_items")
+}
+
+enum HavenItemCategory {
+  BACKGROUND
+  DECORATION
+  FLOWER
+  CANDLE
+  FRAME
+  MUSIC
+}
+
+model HavenItemPurchase {
+  id           String   @id @default(uuid())
+  memorialId   String
+  itemId       String
+  petAccountId String
+  price        Decimal
+  isApplied    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  memorial   HavenMemorial @relation(fields: [memorialId], references: [id])
+  item       HavenShopItem @relation(fields: [itemId], references: [id])
+  petAccount PetAccount    @relation(fields: [petAccountId], references: [id])
+
+  @@index([memorialId])
+  @@map("haven_item_purchases")
+}
+
+// ============================================================
+// 지역 정보 (Region)
+// ============================================================
+model Region {
+  code       String      @id
+  name       String
+  level      RegionLevel
+  parentCode String?
+  latitude   Decimal?
+  longitude  Decimal?
+
+  parent   Region?  @relation("RegionHierarchy", fields: [parentCode], references: [code])
+  children Region[] @relation("RegionHierarchy")
+
+  @@index([parentCode])
+  @@map("regions")
+}
+
+enum RegionLevel {
+  PROVINCE
+  CITY
+  DISTRICT
+}
