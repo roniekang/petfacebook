@@ -55,3 +55,24 @@ export interface UpdatePetRequest {
   personality?: string[];
   favorites?: string[];
 }
+
+export type GuardianRole = "OWNER" | "ADMIN" | "MEMBER";
+export type GuardianStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+
+export interface PetGuardian {
+  id: string;
+  petAccountId: string;
+  guardianId: string;
+  role: GuardianRole;
+  status: GuardianStatus;
+  invitedBy?: string;
+  createdAt: Date;
+  acceptedAt?: Date;
+  guardian?: {
+    id: string;
+    name: string;
+    email: string;
+    profileImage?: string;
+  };
+  petAccount?: PetAccount;
+}

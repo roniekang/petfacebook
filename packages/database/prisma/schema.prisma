@@ -23,6 +23,8 @@ model Guardian {
   updatedAt    DateTime @updatedAt
 
   petAccounts PetAccount[]
+  petGuardians     PetGuardian[]
+  invitedGuardians PetGuardian[] @relation("InvitedBy")
 
   @@map("guardians")
 }
@@ -59,6 +61,7 @@ model PetAccount {
   updatedAt    DateTime    @updatedAt
 
   guardian     Guardian    @relation(fields: [guardianId], references: [id])
+  petGuardians PetGuardian[]
 
   // 소셜 활동
   posts              Post[]
@@ -78,6 +81,7 @@ model PetAccount {
   // 산책
   hostedWalks        WalkMeetup[]
   walkParticipations WalkParticipant[]
+  walkSessions       WalkSession[]
 
   // Pet Haven
   memorial           HavenMemorial?
@@ -170,9 +174,10 @@ model Post {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
-  comments   Comment[]
-  likes      Like[]
+  petAccount  PetAccount   @relation(fields: [petAccountId], references: [id])
+  comments    Comment[]
+  likes       Like[]
+  walkSession WalkSession?
 
   @@index([petAccountId, createdAt(sort: Desc)])
   @@index([geoTag])
@@ -331,6 +336,41 @@ model CommunityPost {
 
   @@index([communityId, createdAt(sort: Desc)])
   @@map("community_posts")
+}
+
+// ============================================================
+// 산책 세션 (WalkSession) - 실시간 산책 추적
+// ============================================================
+model WalkSession {
+  id             String            @id @default(uuid())
+  petAccountId   String
+  status         WalkSessionStatus @default(WALKING)
+  startedAt      DateTime          @default(now())
+  endedAt        DateTime?
+  routePath      Json?             // [{lat, lng, timestamp}]
+  startLatitude  Decimal?
+  startLongitude Decimal?
+  endLatitude    Decimal?
+  endLongitude   Decimal?
+  duration       Int?              // seconds
+  distance       Decimal?          // meters
+  photos         String[]
+  postId         String?           @unique
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id])
+  post       Post?      @relation(fields: [postId], references: [id])
+
+  @@index([petAccountId, status])
+  @@index([petAccountId, createdAt(sort: Desc)])
+  @@map("walk_sessions")
+}
+
+enum WalkSessionStatus {
+  WALKING
+  COMPLETED
+  CANCELLED
 }
 
 // ============================================================
@@ -570,6 +610,40 @@ model HavenItemPurchase {
 
   @@index([memorialId])
   @@map("haven_item_purchases")
+}
+
+// ============================================================
+// 펫-집사 관계 (PetGuardian) - 1 Guardian = 1 Pet, 1 Pet = N Guardians
+// ============================================================
+model PetGuardian {
+  id            String         @id @default(uuid())
+  petAccountId  String
+  guardianId    String         @unique // 집사당 펫 1개 제한
+  role          GuardianRole   @default(MEMBER)
+  status        GuardianStatus @default(PENDING)
+  invitedBy     String?
+  createdAt     DateTime       @default(now())
+  acceptedAt    DateTime?
+
+  petAccount PetAccount @relation(fields: [petAccountId], references: [id], onDelete: Cascade)
+  guardian   Guardian   @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  inviter    Guardian?  @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@unique([petAccountId, guardianId])
+  @@index([petAccountId, status])
+  @@map("pet_guardians")
+}
+
+enum GuardianRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum GuardianStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
 }
 
 // ============================================================

@@ -29,7 +29,8 @@
       "esbuild",
       "prisma",
       "sharp",
-      "unrs-resolver"
+      "unrs-resolver",
+      "bcrypt"
     ]
   }
 }

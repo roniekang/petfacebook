@@ -1,22 +1,44 @@
-import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { UserService } from './user.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentGuardian } from '../../common/decorators/current-guardian.decorator';
+import { UpdateProfileDto, ChangePasswordDto } from './dto/user.dto';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get('me')
-  async getProfile() {
-    return this.userService.getProfile();
+  async getProfile(@CurrentGuardian('id') guardianId: string) {
+    return this.userService.getProfile(guardianId);
   }
 
   @Patch('me')
-  async updateProfile(@Body() body: { nickname?: string; avatarUrl?: string }) {
-    return this.userService.updateProfile(body);
+  async updateProfile(
+    @CurrentGuardian('id') guardianId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.userService.updateProfile(guardianId, dto);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.userService.findOne(id);
+  @Patch('me/password')
+  async changePassword(
+    @CurrentGuardian('id') guardianId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.userService.changePassword(guardianId, dto);
+  }
+
+  @Delete('me')
+  async deleteAccount(@CurrentGuardian('id') guardianId: string) {
+    return this.userService.deleteAccount(guardianId);
   }
 }

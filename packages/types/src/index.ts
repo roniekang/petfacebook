@@ -5,3 +5,5 @@ export * from "./friend";
 export * from "./community";
 export * from "./haven";
 export * from "./coin";
+export * from "./walk";
+export * from "./story";

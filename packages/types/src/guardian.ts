@@ -28,3 +28,14 @@ export interface AuthResponse {
   refreshToken: string;
   guardian: Guardian;
 }
+
+export interface UpdateProfileRequest {
+  name?: string;
+  phone?: string;
+  profileImage?: string;
+}
+
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string;
+}
